@@ -57,9 +57,9 @@ mouse.visible = not mouse_locked
 # ------------------------------------
 # Networking Setup
 # ------------------------------------
+# Prompt the user for the server IP address.
+server_ip = input("Enter the server IP address (default 127.0.0.1): ") or "127.0.0.1"
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# Replace 'server_ip_address' with the actual IP of your server.
-server_ip = '127.0.0.1'
 client_socket.connect((server_ip, 6000))
 
 # Set up a unique identifier for the local client and a dictionary for remote players.
