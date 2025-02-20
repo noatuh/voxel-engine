@@ -4,7 +4,7 @@ import threading
 import json
 
 HOST = '0.0.0.0'   # Listen on all network interfaces.
-PORT = 6000       # Arbitrary port number.
+PORT = 6000        # Arbitrary port number.
 
 clients = []  # List to track connected clients.
 world_state = {
@@ -58,6 +58,8 @@ def handle_client(client, addr):
                     world_state['blocks'].pop(str(pos), None)
                     broadcast(json.dumps(message) + "\n", source_client=client)
                 elif message['type'] == 'player_update':
+                    # Attach a unique identifier (using the client's address) to the message.
+                    message['client_id'] = str(addr)
                     world_state['players'][str(addr)] = message['data']
                     broadcast(json.dumps(message) + "\n", source_client=client)
         except Exception as e:

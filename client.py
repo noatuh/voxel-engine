@@ -11,7 +11,6 @@ app = Ursina()
 # ------------------------------------
 # Game Setup and World Creation
 # ------------------------------------
-
 textures = {
     'grass': 'grass.png',      # Ensure this image is available in your assets.
     'stone': 'white_cube'      # Using a built-in Ursina texture.
@@ -58,11 +57,14 @@ mouse.visible = not mouse_locked
 # ------------------------------------
 # Networking Setup
 # ------------------------------------
-
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Replace 'server_ip_address' with the actual IP of your server.
 server_ip = '127.0.0.1'
 client_socket.connect((server_ip, 6000))
+
+# Set up a unique identifier for the local client and a dictionary for remote players.
+local_client_id = str(client_socket.getsockname())
+other_players = {}  # Maps client IDs to their corresponding Entity models.
 
 def listen_to_server():
     """Continuously listen for messages from the server and update the game state."""
@@ -82,7 +84,7 @@ def listen_to_server():
                     initial_state = data_json['data']
                     for pos_str, block_type in initial_state.get('blocks', {}).items():
                         # Convert string "(x, y, z)" back to a tuple.
-                        pos = eval(pos_str)  # Note: eval() is used here for simplicity.
+                        pos = eval(pos_str)  # Note: using eval() for simplicity.
                         if str(pos) not in blocks:
                             terrain.append(create_block(pos, block_type))
                 elif data_json['type'] == 'block_place':
@@ -100,8 +102,25 @@ def listen_to_server():
                             destroy(block)
                             break
                 elif data_json['type'] == 'player_update':
-                    # Optionally update other players here.
-                    pass
+                    # Handle remote player updates.
+                    client_id = data_json.get('client_id')
+                    # Skip processing if the update is from the local player.
+                    if client_id and client_id != local_client_id:
+                        player_data = data_json['data']
+                        pos = Vec3(*player_data['position'])
+                        rot = Vec3(*player_data['rotation'])
+                        if client_id not in other_players:
+                            # Create a simple model (a cube) for the remote player.
+                            other_players[client_id] = Entity(
+                                model='cube', 
+                                color=color.azure, 
+                                scale=(1, 2, 1),
+                                position=pos
+                            )
+                        else:
+                            # Update the remote player's position and rotation.
+                            other_players[client_id].position = pos
+                            other_players[client_id].rotation = rot
         except Exception as e:
             print("Error in server listener:", e)
             break
@@ -111,7 +130,6 @@ threading.Thread(target=listen_to_server, daemon=True).start()
 # ------------------------------------
 # Input Handling and Game Updates
 # ------------------------------------
-
 def input(key):
     global current_block, mouse_locked
 
