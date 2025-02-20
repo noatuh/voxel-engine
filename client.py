@@ -1,12 +1,43 @@
 # client.py
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
+from ursina.prefabs.input_field import InputField
 import json
 import os
 import socket
 import threading
 
 app = Ursina()
+
+# GUI for Server IP Connection
+# Create an InputField for server IP and a Button to connect.
+ip_field = InputField(default_value="127.0.0.1", scale=(0.3, 0.05), position=(0,0.2))
+connect_button = Button(text="Connect", scale=(0.15, 0.05), position=(0,-0.1))
+
+# Global variables for connection-related data.
+client_socket = None
+local_client_id = None
+other_players = {}
+
+def connect_to_server():
+    global client_socket, local_client_id, other_players
+    server_ip = ip_field.text.strip() or "127.0.0.1"
+    try:
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect((server_ip, 6000))
+    except Exception as e:
+        print("Connection failed:", e)
+        return
+    # Set up a unique client identifier and the dictionary for remote players.
+    local_client_id = str(client_socket.getsockname())
+    other_players = {}
+    # Start listening to server messages.
+    threading.Thread(target=listen_to_server, daemon=True).start()
+    # Remove the connection GUI elements.
+    destroy(ip_field)
+    destroy(connect_button)
+
+connect_button.on_click = connect_to_server
 
 # ------------------------------------
 # Game Setup and World Creation
@@ -55,17 +86,8 @@ mouse.locked = mouse_locked
 mouse.visible = not mouse_locked
 
 # ------------------------------------
-# Networking Setup
+# Networking - Listener Thread
 # ------------------------------------
-# Prompt the user for the server IP address.
-server_ip = input("Enter the server IP address (default 127.0.0.1): ") or "127.0.0.1"
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.connect((server_ip, 6000))
-
-# Set up a unique identifier for the local client and a dictionary for remote players.
-local_client_id = str(client_socket.getsockname())
-other_players = {}  # Maps client IDs to their corresponding Entity models.
-
 def listen_to_server():
     """Continuously listen for messages from the server and update the game state."""
     buffer = ""
@@ -121,11 +143,15 @@ def listen_to_server():
                             # Update the remote player's position and rotation.
                             other_players[client_id].position = pos
                             other_players[client_id].rotation = rot
+                elif data_json['type'] == 'player_disconnect':
+                    # Remove remote player model when a disconnect is received.
+                    client_id = data_json.get('client_id')
+                    if client_id in other_players:
+                        destroy(other_players[client_id])
+                        del other_players[client_id]
         except Exception as e:
             print("Error in server listener:", e)
             break
-
-threading.Thread(target=listen_to_server, daemon=True).start()
 
 # ------------------------------------
 # Input Handling and Game Updates
@@ -179,17 +205,19 @@ def input(key):
 
 def update():
     """Send the player's current position and rotation each frame."""
-    msg = json.dumps({
-        'type': 'player_update',
-        'data': {
-            'position': [player.x, player.y, player.z],
-            'rotation': [player.rotation_x, player.rotation_y, player.rotation_z]
-        }
-    }) + "\n"
-    try:
-        client_socket.sendall(msg.encode())
-    except Exception as e:
-        print("Failed to send player update:", e)
+    # Only send updates if connected to a server.
+    if client_socket:
+        msg = json.dumps({
+            'type': 'player_update',
+            'data': {
+                'position': [player.x, player.y, player.z],
+                'rotation': [player.rotation_x, player.rotation_y, player.rotation_z]
+            }
+        }) + "\n"
+        try:
+            client_socket.sendall(msg.encode())
+        except Exception as e:
+            print("Failed to send player update:", e)
 
 app.run()
 

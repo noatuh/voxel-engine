@@ -24,7 +24,8 @@ def broadcast(message, source_client=None):
                     clients.remove(client)
 
 def handle_client(client, addr):
-    print(f"New connection from: {addr}")
+    client_id = str(addr)
+    print(f"New connection from: {client_id}")
     clients.append(client)
     
     # Send the initial world state to the new client.
@@ -58,18 +59,27 @@ def handle_client(client, addr):
                     world_state['blocks'].pop(str(pos), None)
                     broadcast(json.dumps(message) + "\n", source_client=client)
                 elif message['type'] == 'player_update':
-                    # Attach a unique identifier (using the client's address) to the message.
-                    message['client_id'] = str(addr)
-                    world_state['players'][str(addr)] = message['data']
+                    # Attach a unique identifier to the message.
+                    message['client_id'] = client_id
+                    world_state['players'][client_id] = message['data']
                     broadcast(json.dumps(message) + "\n", source_client=client)
         except Exception as e:
             print("Error handling client message:", e)
             break
 
-    print(f"Connection closed from: {addr}")
+    print(f"Connection closed from: {client_id}")
     client.close()
     if client in clients:
         clients.remove(client)
+    
+    # Remove the player's state and broadcast disconnect message.
+    if client_id in world_state['players']:
+        del world_state['players'][client_id]
+    disconnect_message = json.dumps({
+        'type': 'player_disconnect',
+        'client_id': client_id
+    }) + "\n"
+    broadcast(disconnect_message)
 
 # Set up the server socket.
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
